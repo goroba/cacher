@@ -35,11 +35,11 @@ def check_value_type(key: str, declared: Any, value_type: Any, *, label: str) ->
     )
 
 
-def check_storage_type(key: str, serializer_storage: Any, engine_storage: Any, engine: Any) -> None:
-    if serializer_storage != engine_storage:
+def check_storage_type(key: str, serializer_storage: Any, storage_type: Any, storage: Any) -> None:
+    if serializer_storage != storage_type:
         raise TypeError(
             f"index {key!r}: serializer storage type {serializer_storage!r} "
-            f"does not match {engine.__name__} storage type {engine_storage!r}"
+            f"does not match {storage.__name__} storage type {storage_type!r}"
         )
 
 
@@ -77,23 +77,23 @@ def index_class(
     key: str,
     *,
     serializer_instance: Any,
-    engine: type,
+    storage: type,
     base: type,
     module: str,
     attributes: dict[str, Any],
 ) -> type:
     suffix = "".join(char if char.isalnum() else "_" for char in key)
 
-    def __init__(self: Any, engine_instance: object) -> None:
-        if not isinstance(engine_instance, engine):
-            raise TypeError(f"expected {engine.__name__}, got {type(engine_instance).__name__}")
-        self.engine = engine_instance
+    def __init__(self: Any, storage_instance: object) -> None:
+        if not isinstance(storage_instance, storage):
+            raise TypeError(f"expected {storage.__name__}, got {type(storage_instance).__name__}")
+        self.storage = storage_instance
 
     namespace: dict[str, Any] = {
         "__module__": module,
         "serializer": serializer_instance,
         "key": key,
-        "engine": engine,
+        "storage": storage,
         "__init__": __init__,
     }
     namespace.update(attributes)

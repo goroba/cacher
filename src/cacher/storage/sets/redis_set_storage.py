@@ -1,12 +1,12 @@
-"""Synchronous Redis set engine."""
+"""Synchronous Redis set storage."""
 
 from collections.abc import Sequence
 
-from cacher.engines._redis import Redis
-from cacher.engines.sets.engine import SetEngine
+from cacher.storage._redis import Redis
+from cacher.storage.sets.storage import SetStorage
 
 
-class RedisSetEngine(SetEngine[str]):
+class RedisSetStorage(SetStorage[str]):
     """Synchronous Redis sets. ``name`` is the Redis key."""
 
     def __init__(self, client: Redis) -> None:

@@ -1,12 +1,12 @@
-"""Asynchronous Redis hash engine."""
+"""Asynchronous Redis hash storage."""
 
 from collections.abc import Mapping, Sequence
 
-from cacher.engines._redis import AsyncRedis, decode
-from cacher.engines.key_value.async_engine import AsyncKeyValueEngine
+from cacher.storage._redis import AsyncRedis, decode
+from cacher.storage.key_value.async_storage import AsyncKeyValueStorage
 
 
-class AsyncRedisHashEngine(AsyncKeyValueEngine[str, str]):
+class AsyncRedisHashStorage(AsyncKeyValueStorage[str, str]):
     """Asynchronous Redis hashes. One instance can serve any hash name."""
 
     def __init__(self, client: AsyncRedis) -> None:

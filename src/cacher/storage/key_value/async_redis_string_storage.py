@@ -1,16 +1,16 @@
-"""Asynchronous Redis string engine."""
+"""Asynchronous Redis string storage."""
 
 from collections.abc import Mapping, Sequence
 
-from cacher.engines._redis import AsyncRedis, decode
-from cacher.engines.key_value.async_engine import AsyncKeyValueEngine
+from cacher.storage._redis import AsyncRedis, decode
+from cacher.storage.key_value.async_storage import AsyncKeyValueStorage
 
 
 def _redis_key(name: str, field: str) -> str:
     return f"{name}:{field}"
 
 
-class AsyncRedisStringEngine(AsyncKeyValueEngine[str, str]):
+class AsyncRedisStringStorage(AsyncKeyValueStorage[str, str]):
     """Asynchronous Redis strings. The Redis key is ``name:field``."""
 
     def __init__(self, client: AsyncRedis) -> None:

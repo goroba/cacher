@@ -3,8 +3,6 @@
 from collections.abc import Hashable
 from typing import Any, Protocol, cast
 
-from cacher.engines.sets.async_engine import AsyncSetEngine
-from cacher.engines.sets.engine import SetEngine
 from cacher.indexes._builder import (
     check_key,
     check_storage_type,
@@ -17,64 +15,66 @@ from cacher.indexes._builder import (
 from cacher.indexes.sets.async_index import AsyncSetIndex
 from cacher.indexes.sets.index import SetIndex
 from cacher.serializers.serializer import Serializer
+from cacher.storage.sets.async_storage import AsyncSetStorage
+from cacher.storage.sets.storage import SetStorage
 
 
 class _SyncSetIndexFactory[
     MemberType,
     StorageType: Hashable,
-    EngineType: SetEngine[StorageType],
+    Storage: SetStorage[StorageType],
 ](Protocol):
-    """Sync set index class. Call it with an engine instance."""
+    """Sync set index class. Call it with a storage instance."""
 
     member: type[MemberType]
     serializer: Serializer[MemberType, StorageType]
     key: str
-    engine: type[EngineType]
+    storage: type[Storage]
 
-    def __call__(self, engine: EngineType) -> SetIndex[MemberType, StorageType]: ...
+    def __call__(self, storage: Storage) -> SetIndex[MemberType, StorageType]: ...
 
 
 class _AsyncSetIndexFactory[
     MemberType,
     StorageType: Hashable,
-    EngineType: AsyncSetEngine[StorageType],
+    Storage: AsyncSetStorage[StorageType],
 ](Protocol):
-    """Async set index class. Call it with an engine instance."""
+    """Async set index class. Call it with a storage instance."""
 
     member: type[MemberType]
     serializer: Serializer[MemberType, StorageType]
     key: str
-    engine: type[EngineType]
+    storage: type[Storage]
 
-    def __call__(self, engine: EngineType) -> AsyncSetIndex[MemberType, StorageType]: ...
+    def __call__(self, storage: Storage) -> AsyncSetIndex[MemberType, StorageType]: ...
 
 
 def build_set_index[
     MemberType,
     StorageType: Hashable,
-    EngineType: SetEngine[StorageType],
+    Storage: SetStorage[StorageType],
 ](
     key: str,
     *,
     member_type: type[MemberType],
     serializer: type[Serializer[MemberType, StorageType]],
-    engine: type[EngineType],
-) -> _SyncSetIndexFactory[MemberType, StorageType, EngineType]:
-    """Register a sync set index whose member, serializer, and engine types agree.
+    storage: type[Storage],
+) -> _SyncSetIndexFactory[MemberType, StorageType, Storage]:
+    """Register a sync set index whose member, serializer, and storage types agree.
 
-    The serializer is constructed here. Call the result with an engine instance;
-    the engine's own constructor arguments stay with the caller.
+    The serializer is constructed here. Call the result with a storage instance;
+    the storage's own constructor arguments stay with the caller.
     """
     return cast(
-        _SyncSetIndexFactory[MemberType, StorageType, EngineType],
+        _SyncSetIndexFactory[MemberType, StorageType, Storage],
         _build(
             key,
             member_type=member_type,
             serializer=serializer,
-            engine=engine,
+            storage=storage,
             base=SetIndex,
-            protocol=SetEngine,
-            other=AsyncSetEngine,
+            protocol=SetStorage,
+            other=AsyncSetStorage,
         ),
     )
 
@@ -82,29 +82,29 @@ def build_set_index[
 def build_async_set_index[
     MemberType,
     StorageType: Hashable,
-    EngineType: AsyncSetEngine[StorageType],
+    Storage: AsyncSetStorage[StorageType],
 ](
     key: str,
     *,
     member_type: type[MemberType],
     serializer: type[Serializer[MemberType, StorageType]],
-    engine: type[EngineType],
-) -> _AsyncSetIndexFactory[MemberType, StorageType, EngineType]:
-    """Register an async set index whose member, serializer, and engine types agree.
+    storage: type[Storage],
+) -> _AsyncSetIndexFactory[MemberType, StorageType, Storage]:
+    """Register an async set index whose member, serializer, and storage types agree.
 
-    The serializer is constructed here. Call the result with an engine instance;
-    the engine's own constructor arguments stay with the caller.
+    The serializer is constructed here. Call the result with a storage instance;
+    the storage's own constructor arguments stay with the caller.
     """
     return cast(
-        _AsyncSetIndexFactory[MemberType, StorageType, EngineType],
+        _AsyncSetIndexFactory[MemberType, StorageType, Storage],
         _build(
             key,
             member_type=member_type,
             serializer=serializer,
-            engine=engine,
+            storage=storage,
             base=AsyncSetIndex,
-            protocol=AsyncSetEngine,
-            other=SetEngine,
+            protocol=AsyncSetStorage,
+            other=SetStorage,
         ),
     )
 
@@ -114,48 +114,48 @@ def _build(
     *,
     member_type: Any,
     serializer: Any,
-    engine: Any,
+    storage: Any,
     base: type[SetIndex[Any, Any]] | type[AsyncSetIndex[Any, Any]],
-    protocol: type[SetEngine[Any]] | type[AsyncSetEngine[Any]],
-    other: type[SetEngine[Any]] | type[AsyncSetEngine[Any]],
+    protocol: type[SetStorage[Any]] | type[AsyncSetStorage[Any]],
+    other: type[SetStorage[Any]] | type[AsyncSetStorage[Any]],
 ) -> type:
     check_key(key)
     value_type, serializer_storage = serializer_types(key, serializer)
     check_value_type(key, member_type, value_type, label="member type")
-    engine_storage = _engine_storage(key, engine, protocol, other)
-    check_storage_type(key, serializer_storage, engine_storage, engine)
+    storage_type = _storage_type(key, storage, protocol, other)
+    check_storage_type(key, serializer_storage, storage_type, storage)
     serializer_instance = construct_serializer(key, serializer, member_type)
     return index_class(
         key,
         serializer_instance=serializer_instance,
-        engine=engine,
+        storage=storage,
         base=base,
         module=__name__,
         attributes={"member": member_type},
     )
 
 
-def _engine_storage(
+def _storage_type(
     key: str,
-    engine: Any,
+    storage: Any,
     protocol: type,
     other: type,
 ) -> Any:
-    if not isinstance(engine, type):
-        raise TypeError(f"index {key!r}: engine must be a class, got {type(engine).__name__}")
-    args = protocol_args(engine, protocol)
+    if not isinstance(storage, type):
+        raise TypeError(f"index {key!r}: storage must be a class, got {type(storage).__name__}")
+    args = protocol_args(storage, protocol)
     if args is None or len(args) != 1:
-        if protocol_args(engine, other) is not None:
-            if protocol is SetEngine:
+        if protocol_args(storage, other) is not None:
+            if protocol is SetStorage:
                 raise TypeError(
-                    f"index {key!r}: {engine.__name__} is asynchronous; "
-                    "build_set_index requires SetEngine"
+                    f"index {key!r}: {storage.__name__} is asynchronous; "
+                    "build_set_index requires SetStorage"
                 )
             raise TypeError(
-                f"index {key!r}: {engine.__name__} is synchronous; "
-                "build_async_set_index requires AsyncSetEngine"
+                f"index {key!r}: {storage.__name__} is synchronous; "
+                "build_async_set_index requires AsyncSetStorage"
             )
         raise TypeError(
-            f"index {key!r}: {engine.__name__} does not declare {protocol.__name__}[MemberType]"
+            f"index {key!r}: {storage.__name__} does not declare {protocol.__name__}[MemberType]"
         )
     return args[0]

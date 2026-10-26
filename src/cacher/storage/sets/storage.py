@@ -1,11 +1,11 @@
-"""Synchronous set engine."""
+"""Synchronous set storage."""
 
 from collections.abc import Hashable, Sequence
 from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable
-class SetEngine[MemberType: Hashable](Protocol):
+class SetStorage[MemberType: Hashable](Protocol):
     """Synchronous set storage.
 
     ``name`` is the set name. ``member`` is one element of that set.

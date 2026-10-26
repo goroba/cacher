@@ -1,12 +1,12 @@
-"""Synchronous Redis hash engine."""
+"""Synchronous Redis hash storage."""
 
 from collections.abc import Mapping, Sequence
 
-from cacher.engines._redis import Redis, decode
-from cacher.engines.key_value.engine import KeyValueEngine
+from cacher.storage._redis import Redis, decode
+from cacher.storage.key_value.storage import KeyValueStorage
 
 
-class RedisHashEngine(KeyValueEngine[str, str]):
+class RedisHashStorage(KeyValueStorage[str, str]):
     """Synchronous Redis hashes. One instance can serve any hash name."""
 
     def __init__(self, client: Redis) -> None:
