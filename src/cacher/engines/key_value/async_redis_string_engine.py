@@ -3,14 +3,14 @@
 from collections.abc import Mapping, Sequence
 
 from cacher.engines._redis import AsyncRedis, decode
-from cacher.engines.async_engine import AsyncEngine
+from cacher.engines.key_value.async_engine import AsyncKeyValueEngine
 
 
 def _redis_key(name: str, field: str) -> str:
     return f"{name}:{field}"
 
 
-class AsyncRedisStringEngine(AsyncEngine[str, str]):
+class AsyncRedisStringEngine(AsyncKeyValueEngine[str, str]):
     """Asynchronous Redis strings. The Redis key is ``name:field``."""
 
     def __init__(self, client: AsyncRedis) -> None:

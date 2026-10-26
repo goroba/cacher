@@ -9,19 +9,19 @@ import pytest
 from pydantic import BaseModel
 
 from cacher import (
-    AsyncIndex,
+    AsyncKeyValueIndex,
     DictSerializer,
-    Index,
     IntSerializer,
-    build_async_index,
-    build_index,
-    get_async_index,
-    get_index,
+    KeyValueIndex,
+    build_async_key_value_index,
+    build_key_value_index,
+    get_async_key_value_index,
+    get_key_value_index,
 )
-from cacher.engines.async_redis_hash_engine import AsyncRedisHashEngine
-from cacher.engines.engine import Engine
-from cacher.engines.redis_hash_engine import RedisHashEngine
-from cacher.engines.redis_string_engine import RedisStringEngine
+from cacher.engines.key_value.async_redis_hash_engine import AsyncRedisHashEngine
+from cacher.engines.key_value.engine import KeyValueEngine
+from cacher.engines.key_value.redis_hash_engine import RedisHashEngine
+from cacher.engines.key_value.redis_string_engine import RedisStringEngine
 from cacher.serializers.dataclass_serializer import DataclassSerializer
 from cacher.serializers.datetime_serializer import DatetimeSerializer
 from cacher.serializers.pydantic_serializer import PydanticSerializer
@@ -77,7 +77,7 @@ class NeedsExtra(Serializer[int, str]):
         return int(value)
 
 
-class MemoryEngine(Engine[str, str]):
+class MemoryEngine(KeyValueEngine[str, str]):
     def __init__(self) -> None:
         self.data: dict[tuple[str, str], str] = {}
 
@@ -101,24 +101,24 @@ class MemoryEngine(Engine[str, str]):
             self.data[(name, field)] = value
 
 
-class BytesEngine(Engine[str, bytes]):
+class BytesEngine(KeyValueEngine[str, bytes]):
     pass
 
 
-class UuidFieldEngine(Engine[UUID, str]):
+class UuidFieldEngine(KeyValueEngine[UUID, str]):
     pass
 
 
 def test_builders_are_public() -> None:
     import cacher
 
-    assert cacher.build_index is build_index
-    assert cacher.build_async_index is build_async_index
+    assert cacher.build_key_value_index is build_key_value_index
+    assert cacher.build_async_key_value_index is build_async_key_value_index
 
 
 def test_sync_datetime_index_round_trip() -> None:
     client = fakeredis.FakeRedis(decode_responses=True)
-    index_cls = build_index(
+    index_cls = build_key_value_index(
         "user_last_activities",
         id_type=UUID,
         model_type=datetime,
@@ -126,8 +126,8 @@ def test_sync_datetime_index_round_trip() -> None:
         engine=RedisStringEngine,
     )
 
-    assert index_cls is get_index("user_last_activities")
-    assert issubclass(index_cls, Index)
+    assert index_cls is get_key_value_index("user_last_activities")
+    assert issubclass(index_cls, KeyValueIndex)
     assert index_cls.identifier is UUID
     assert index_cls.model is datetime
     assert index_cls.key == "user_last_activities"
@@ -136,7 +136,7 @@ def test_sync_datetime_index_round_trip() -> None:
 
     engine = RedisStringEngine(client)
     index = index_cls(engine)
-    assert isinstance(index, Index)
+    assert isinstance(index, KeyValueIndex)
     assert index.engine is engine
     assert index_cls.engine is RedisStringEngine
 
@@ -152,15 +152,15 @@ def test_sync_datetime_index_round_trip() -> None:
 def test_async_pydantic_index_round_trip() -> None:
     async def scenario() -> None:
         client = fakeredis.FakeAsyncRedis(decode_responses=True)
-        index_cls = build_async_index(
+        index_cls = build_async_key_value_index(
             "builder_users",
             id_type=UUID,
             model_type=User,
             serializer=PydanticSerializer,
             engine=AsyncRedisHashEngine,
         )
-        assert index_cls is get_async_index("builder_users")
-        assert issubclass(index_cls, AsyncIndex)
+        assert index_cls is get_async_key_value_index("builder_users")
+        assert issubclass(index_cls, AsyncKeyValueIndex)
         assert index_cls.identifier is UUID
         assert index_cls.model is User
         assert index_cls.engine is AsyncRedisHashEngine
@@ -170,7 +170,7 @@ def test_async_pydantic_index_round_trip() -> None:
         index = index_cls(engine)
         user = User(id=1, name="Ada")
         try:
-            assert isinstance(index, AsyncIndex)
+            assert isinstance(index, AsyncKeyValueIndex)
             assert index.engine is engine
             await index.set(USER_ID, user)
             stored = await client.hget("builder_users", str(USER_ID))
@@ -183,7 +183,7 @@ def test_async_pydantic_index_round_trip() -> None:
 
 
 def test_serializer_subclass_keeps_parent_types() -> None:
-    index_cls = build_index(
+    index_cls = build_key_value_index(
         "builder_activity_subclass",
         id_type=UUID,
         model_type=datetime,
@@ -195,7 +195,7 @@ def test_serializer_subclass_keeps_parent_types() -> None:
 
 
 def test_custom_serializer_and_engine_round_trip() -> None:
-    index_cls = build_index(
+    index_cls = build_key_value_index(
         "builder_colors",
         id_type=UUID,
         model_type=Color,
@@ -206,13 +206,13 @@ def test_custom_serializer_and_engine_round_trip() -> None:
     index = index_cls(engine)
 
     index.set(USER_ID, Color("red"))
-    assert isinstance(engine, Engine)
+    assert isinstance(engine, KeyValueEngine)
     assert engine.data[("builder_colors", str(USER_ID))] == "red"
     assert index.get(USER_ID) == Color("red")
 
 
 def test_specialized_serializer_uses_its_model() -> None:
-    index_cls = build_async_index(
+    index_cls = build_async_key_value_index(
         "builder_user_serializer",
         id_type=UUID,
         model_type=User,
@@ -223,7 +223,7 @@ def test_specialized_serializer_uses_its_model() -> None:
     assert isinstance(index_cls.serializer, UserSerializer)
 
     with pytest.raises(TypeError):
-        build_async_index(
+        build_async_key_value_index(
             "builder_user_serializer_other",
             id_type=UUID,
             model_type=OtherUser,
@@ -231,11 +231,11 @@ def test_specialized_serializer_uses_its_model() -> None:
             engine=AsyncRedisHashEngine,
         )
     with pytest.raises(KeyError):
-        get_async_index("builder_user_serializer_other")
+        get_async_key_value_index("builder_user_serializer_other")
 
 
 def test_duplicate_key() -> None:
-    first = build_index(
+    first = build_key_value_index(
         "builder_duplicate",
         id_type=int,
         model_type=int,
@@ -243,14 +243,14 @@ def test_duplicate_key() -> None:
         engine=MemoryEngine,
     )
     with pytest.raises(ValueError):
-        build_index(
+        build_key_value_index(
             "builder_duplicate",
             id_type=int,
             model_type=int,
             serializer=IntSerializer,
             engine=MemoryEngine,
         )
-    assert get_index("builder_duplicate") is first
+    assert get_key_value_index("builder_duplicate") is first
 
 
 def test_rejected_combinations_do_not_register() -> None:
@@ -258,7 +258,7 @@ def test_rejected_combinations_do_not_register() -> None:
         (
             "builder_model_mismatch",
             False,
-            lambda: build_index(
+            lambda: build_key_value_index(
                 "builder_model_mismatch",
                 id_type=UUID,
                 model_type=int,
@@ -269,7 +269,7 @@ def test_rejected_combinations_do_not_register() -> None:
         (
             "builder_bool",
             False,
-            lambda: build_index(
+            lambda: build_key_value_index(
                 "builder_bool",
                 id_type=int,
                 model_type=bool,
@@ -280,7 +280,7 @@ def test_rejected_combinations_do_not_register() -> None:
         (
             "builder_bytes",
             False,
-            lambda: build_index(
+            lambda: build_key_value_index(
                 "builder_bytes",
                 id_type=int,
                 model_type=int,
@@ -291,7 +291,7 @@ def test_rejected_combinations_do_not_register() -> None:
         (
             "builder_uuid_field",
             False,
-            lambda: build_index(
+            lambda: build_key_value_index(
                 "builder_uuid_field",
                 id_type=UUID,
                 model_type=datetime,
@@ -302,7 +302,7 @@ def test_rejected_combinations_do_not_register() -> None:
         (
             "builder_sync_engine",
             True,
-            lambda: build_async_index(
+            lambda: build_async_key_value_index(
                 "builder_sync_engine",
                 id_type=int,
                 model_type=int,
@@ -313,7 +313,7 @@ def test_rejected_combinations_do_not_register() -> None:
         (
             "builder_async_engine",
             False,
-            lambda: build_index(
+            lambda: build_key_value_index(
                 "builder_async_engine",
                 id_type=UUID,
                 model_type=datetime,
@@ -324,7 +324,7 @@ def test_rejected_combinations_do_not_register() -> None:
         (
             "builder_pydantic_datetime",
             True,
-            lambda: build_async_index(
+            lambda: build_async_key_value_index(
                 "builder_pydantic_datetime",
                 id_type=UUID,
                 model_type=datetime,
@@ -335,7 +335,7 @@ def test_rejected_combinations_do_not_register() -> None:
         (
             "builder_plain_dict",
             False,
-            lambda: build_index(
+            lambda: build_key_value_index(
                 "builder_plain_dict",
                 id_type=int,
                 model_type=dict,
@@ -346,7 +346,7 @@ def test_rejected_combinations_do_not_register() -> None:
         (
             "builder_needs_extra",
             False,
-            lambda: build_index(
+            lambda: build_key_value_index(
                 "builder_needs_extra",
                 id_type=int,
                 model_type=int,
@@ -357,7 +357,7 @@ def test_rejected_combinations_do_not_register() -> None:
         (
             "builder_not_dataclass",
             False,
-            lambda: build_index(
+            lambda: build_key_value_index(
                 "builder_not_dataclass",
                 id_type=int,
                 model_type=int,
@@ -369,14 +369,14 @@ def test_rejected_combinations_do_not_register() -> None:
     for key, async_index, build in cases:
         with pytest.raises(TypeError):
             build()
-        getter = get_async_index if async_index else get_index
+        getter = get_async_key_value_index if async_index else get_key_value_index
         with pytest.raises(KeyError):
             getter(key)
 
 
 def test_empty_key() -> None:
     with pytest.raises(TypeError):
-        build_index(
+        build_key_value_index(
             "",
             id_type=int,
             model_type=int,
@@ -386,7 +386,7 @@ def test_empty_key() -> None:
 
 
 def test_dict_alias_matches_dict_serializer() -> None:
-    index_cls = build_index(
+    index_cls = build_key_value_index(
         "builder_dict_alias",
         id_type=int,
         model_type=dict[str, Any],

@@ -3,10 +3,10 @@
 from collections.abc import Mapping, Sequence
 
 from cacher.engines._redis import AsyncRedis, decode
-from cacher.engines.async_engine import AsyncEngine
+from cacher.engines.key_value.async_engine import AsyncKeyValueEngine
 
 
-class AsyncRedisHashEngine(AsyncEngine[str, str]):
+class AsyncRedisHashEngine(AsyncKeyValueEngine[str, str]):
     """Asynchronous Redis hashes. One instance can serve any hash name."""
 
     def __init__(self, client: AsyncRedis) -> None:

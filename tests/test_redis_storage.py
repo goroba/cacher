@@ -4,8 +4,8 @@ from collections.abc import Sequence
 import fakeredis
 
 from cacher.engines import AsyncRedisStringEngine, RedisStringEngine
-from cacher.engines.async_engine import AsyncEngine
-from cacher.engines.engine import Engine
+from cacher.engines.key_value.async_engine import AsyncKeyValueEngine
+from cacher.engines.key_value.engine import KeyValueEngine
 
 _NAME = "users"
 
@@ -26,7 +26,7 @@ def test_sync_engine_round_trip() -> None:
     client = fakeredis.FakeRedis(decode_responses=True)
     engine = RedisStringEngine(client)
 
-    assert isinstance(engine, Engine)
+    assert isinstance(engine, KeyValueEngine)
     assert engine.get(_NAME, "missing") is None
     assert engine.exists(_NAME, "missing") is False
     engine.delete(_NAME, "missing")
@@ -77,7 +77,7 @@ def test_async_engine_round_trip() -> None:
         client = fakeredis.FakeAsyncRedis(decode_responses=True)
         engine = AsyncRedisStringEngine(client)
         try:
-            assert isinstance(engine, AsyncEngine)
+            assert isinstance(engine, AsyncKeyValueEngine)
             assert await engine.get(_NAME, "missing") is None
             assert await engine.exists(_NAME, "missing") is False
             await engine.delete(_NAME, "missing")

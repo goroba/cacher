@@ -1,18 +1,20 @@
-"""Synchronous index."""
+"""Synchronous key-value index."""
 
 from collections.abc import Hashable, Mapping, Sequence
 
-from cacher.engines.engine import Engine
-from cacher.indexes.base_index import BaseIndex, _sync_indexes
+from cacher.engines.key_value.engine import KeyValueEngine
+from cacher.indexes.key_value.base_index import _KeyValueBase, _sync_indexes
 
 
-class Index[IdType: Hashable, ModelType, StorageType](BaseIndex[IdType, ModelType, StorageType]):
-    """Sync index: model binding, storage key, and the engine that persists it.
+class KeyValueIndex[IdType: Hashable, ModelType, StorageType](
+    _KeyValueBase[IdType, ModelType, StorageType]
+):
+    """Sync key-value index: model binding, storage key, and the engine that persists it.
 
     Reads deserialize and writes serialize. The identifier is stored as ``str(id)``.
     """
 
-    engine: Engine[str, StorageType]
+    engine: KeyValueEngine[str, StorageType]
     _registry = _sync_indexes
 
     def get(self, id: IdType) -> ModelType | None:

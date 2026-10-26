@@ -3,13 +3,15 @@ from collections.abc import Mapping, Sequence
 import pytest
 
 from cacher import (
-    AsyncEngine,
-    AsyncIndex,
-    Engine,
-    Index,
+    AsyncKeyValueEngine,
+    AsyncKeyValueIndex,
+    AsyncSetEngine,
     IntSerializer,
-    get_async_index,
-    get_index,
+    KeyValueEngine,
+    KeyValueIndex,
+    SetEngine,
+    get_async_key_value_index,
+    get_key_value_index,
 )
 
 
@@ -25,7 +27,7 @@ user_engine = UserEngine()
 async_user_engine = AsyncUserEngine()
 
 
-class UserIndex(Index):
+class UserIndex(KeyValueIndex):
     identifier = int
     model = int
     serializer = IntSerializer()
@@ -33,7 +35,7 @@ class UserIndex(Index):
     engine = user_engine
 
 
-class AsyncUserIndex(AsyncIndex):
+class AsyncUserIndex(AsyncKeyValueIndex):
     identifier = int
     model = int
     serializer = IntSerializer()
@@ -47,22 +49,22 @@ class IncompleteIndex:
 
 
 def test_index_registry() -> None:
-    assert isinstance(UserIndex(), Index)
-    assert isinstance(AsyncUserIndex(), AsyncIndex)
+    assert isinstance(UserIndex(), KeyValueIndex)
+    assert isinstance(AsyncUserIndex(), AsyncKeyValueIndex)
     assert UserIndex.engine is user_engine
     assert AsyncUserIndex.engine is async_user_engine
-    assert not isinstance(IncompleteIndex(), Index)
-    assert get_index("users") is UserIndex
-    assert get_async_index("users") is AsyncUserIndex
+    assert not isinstance(IncompleteIndex(), KeyValueIndex)
+    assert get_key_value_index("users") is UserIndex
+    assert get_async_key_value_index("users") is AsyncUserIndex
     with pytest.raises(KeyError):
-        get_index("missing")
+        get_key_value_index("missing")
     with pytest.raises(KeyError):
-        get_async_index("missing")
+        get_async_key_value_index("missing")
 
 
 def test_duplicate_index_key() -> None:
     with pytest.raises(ValueError):
-        class DuplicateUserIndex(Index):
+        class DuplicateUserIndex(KeyValueIndex):
             identifier = int
             model = int
             serializer = IntSerializer()
@@ -110,15 +112,57 @@ class AsyncMemoryHash:
         return None
 
 
+class MemorySet:
+    def add(self, name: str, member: str) -> None:
+        return None
+
+    def madd(self, name: str, members: Sequence[str]) -> None:
+        return None
+
+    def remove(self, name: str, member: str) -> None:
+        return None
+
+    def mremove(self, name: str, members: Sequence[str]) -> None:
+        return None
+
+    def contains(self, name: str, member: str) -> bool:
+        return False
+
+
+class AsyncMemorySet:
+    async def add(self, name: str, member: str) -> None:
+        return None
+
+    async def madd(self, name: str, members: Sequence[str]) -> None:
+        return None
+
+    async def remove(self, name: str, member: str) -> None:
+        return None
+
+    async def mremove(self, name: str, members: Sequence[str]) -> None:
+        return None
+
+    async def contains(self, name: str, member: str) -> bool:
+        return False
+
+
 def test_engine_protocols() -> None:
-    assert isinstance(MemoryHash(), Engine)
-    assert isinstance(AsyncMemoryHash(), AsyncEngine)
+    assert isinstance(MemoryHash(), KeyValueEngine)
+    assert isinstance(AsyncMemoryHash(), AsyncKeyValueEngine)
+    assert isinstance(MemorySet(), SetEngine)
+    assert isinstance(AsyncMemorySet(), AsyncSetEngine)
 
 
 def test_public_api_omits_redis_engines() -> None:
     import cacher
 
-    assert "RedisStringEngine" not in cacher.__all__
-    assert not hasattr(cacher, "RedisStringEngine")
-    assert "RedisHashEngine" not in cacher.__all__
-    assert not hasattr(cacher, "RedisHashEngine")
+    for name in (
+        "RedisStringEngine",
+        "RedisHashEngine",
+        "RedisSetEngine",
+        "AsyncRedisStringEngine",
+        "AsyncRedisHashEngine",
+        "AsyncRedisSetEngine",
+    ):
+        assert name not in cacher.__all__
+        assert not hasattr(cacher, name)

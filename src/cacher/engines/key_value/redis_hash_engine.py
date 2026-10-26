@@ -3,10 +3,10 @@
 from collections.abc import Mapping, Sequence
 
 from cacher.engines._redis import Redis, decode
-from cacher.engines.engine import Engine
+from cacher.engines.key_value.engine import KeyValueEngine
 
 
-class RedisHashEngine(Engine[str, str]):
+class RedisHashEngine(KeyValueEngine[str, str]):
     """Synchronous Redis hashes. One instance can serve any hash name."""
 
     def __init__(self, client: Redis) -> None:

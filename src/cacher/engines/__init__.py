@@ -1,37 +1,43 @@
 """Storage engines.
 
-``Engine`` and ``AsyncEngine`` do not require Redis.
-Importing a Redis engine class requires the ``redis`` extra.
+Protocols do not require Redis. Importing a Redis engine class requires the ``redis`` extra.
 """
 
-from cacher.engines.async_engine import AsyncEngine
-from cacher.engines.engine import Engine
+import importlib
+
+from cacher.engines.key_value import AsyncKeyValueEngine, KeyValueEngine
+from cacher.engines.sets import AsyncSetEngine, SetEngine
 
 __all__ = [
-    "AsyncEngine",
+    "AsyncKeyValueEngine",
+    "AsyncRedisHashEngine",
+    "AsyncRedisSetEngine",
+    "AsyncRedisStringEngine",
+    "AsyncSetEngine",
+    "KeyValueEngine",
+    "RedisHashEngine",
+    "RedisSetEngine",
+    "RedisStringEngine",
+    "SetEngine",
+]
+
+_KEY_VALUE = {
     "AsyncRedisHashEngine",
     "AsyncRedisStringEngine",
-    "Engine",
     "RedisHashEngine",
     "RedisStringEngine",
-]
+}
+_SETS = {
+    "AsyncRedisSetEngine",
+    "RedisSetEngine",
+}
 
 
 def __getattr__(name: str) -> type:
-    if name == "AsyncRedisHashEngine":
-        from cacher.engines.async_redis_hash_engine import AsyncRedisHashEngine
-
-        return AsyncRedisHashEngine
-    if name == "AsyncRedisStringEngine":
-        from cacher.engines.async_redis_string_engine import AsyncRedisStringEngine
-
-        return AsyncRedisStringEngine
-    if name == "RedisHashEngine":
-        from cacher.engines.redis_hash_engine import RedisHashEngine
-
-        return RedisHashEngine
-    if name == "RedisStringEngine":
-        from cacher.engines.redis_string_engine import RedisStringEngine
-
-        return RedisStringEngine
+    if name in _KEY_VALUE:
+        module = importlib.import_module("cacher.engines.key_value")
+        return getattr(module, name)
+    if name in _SETS:
+        module = importlib.import_module("cacher.engines.sets")
+        return getattr(module, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -1,18 +1,20 @@
-"""Asynchronous index."""
+"""Asynchronous key-value index."""
 
 from collections.abc import Hashable, Mapping, Sequence
 
-from cacher.engines.async_engine import AsyncEngine
-from cacher.indexes.base_index import BaseIndex, _async_indexes
+from cacher.engines.key_value.async_engine import AsyncKeyValueEngine
+from cacher.indexes.key_value.base_index import _KeyValueBase, _async_indexes
 
 
-class AsyncIndex[IdType: Hashable, ModelType, StorageType](BaseIndex[IdType, ModelType, StorageType]):
-    """Async index: model binding, storage key, and the engine that persists it.
+class AsyncKeyValueIndex[IdType: Hashable, ModelType, StorageType](
+    _KeyValueBase[IdType, ModelType, StorageType]
+):
+    """Async key-value index: model binding, storage key, and the engine that persists it.
 
     Reads deserialize and writes serialize. The identifier is stored as ``str(id)``.
     """
 
-    engine: AsyncEngine[str, StorageType]
+    engine: AsyncKeyValueEngine[str, StorageType]
     _registry = _async_indexes
 
     async def get(self, id: IdType) -> ModelType | None:

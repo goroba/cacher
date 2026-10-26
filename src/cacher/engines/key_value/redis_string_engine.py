@@ -3,14 +3,14 @@
 from collections.abc import Mapping, Sequence
 
 from cacher.engines._redis import Redis, decode
-from cacher.engines.engine import Engine
+from cacher.engines.key_value.engine import KeyValueEngine
 
 
 def _redis_key(name: str, field: str) -> str:
     return f"{name}:{field}"
 
 
-class RedisStringEngine(Engine[str, str]):
+class RedisStringEngine(KeyValueEngine[str, str]):
     """Synchronous Redis strings. The Redis key is ``name:field``."""
 
     def __init__(self, client: Redis) -> None:

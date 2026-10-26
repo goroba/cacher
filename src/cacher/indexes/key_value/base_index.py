@@ -1,35 +1,35 @@
-"""Shared index attributes and key registry."""
+"""Shared key-value index attributes and key registry."""
 
 from __future__ import annotations
 
 from collections.abc import Hashable
 from typing import TYPE_CHECKING, ClassVar
 
-from cacher.engines.async_engine import AsyncEngine
-from cacher.engines.engine import Engine
+from cacher.engines.key_value.async_engine import AsyncKeyValueEngine
+from cacher.engines.key_value.engine import KeyValueEngine
 from cacher.serializers.serializer import Serializer
 
 if TYPE_CHECKING:
-    from cacher.indexes.async_index import AsyncIndex
-    from cacher.indexes.index import Index
+    from cacher.indexes.key_value.async_index import AsyncKeyValueIndex
+    from cacher.indexes.key_value.index import KeyValueIndex
 
 _sync_indexes: dict[str, type] = {}
 _async_indexes: dict[str, type] = {}
 
 
-class BaseIndex[IdType: Hashable, ModelType, StorageType]:
-    """Identifier, model, serializer, storage key, and engine for an index.
+class _KeyValueBase[IdType: Hashable, ModelType, StorageType]:
+    """Identifier, model, serializer, storage key, and engine for a key-value index.
 
     ``ModelType`` is unconstrained: a builtin such as ``int`` or any class.
     ``key`` names that model in storage. For a hash engine it is the hash name.
-    ``engine`` is the storage engine instance. Fields are stored as ``str``.
+    ``engine`` is the key-value engine instance. Fields are stored as ``str``.
     """
 
     identifier: type[IdType]
     model: type[ModelType]
     serializer: Serializer[ModelType, StorageType]
     key: str
-    engine: Engine[str, StorageType] | AsyncEngine[str, StorageType]
+    engine: KeyValueEngine[str, StorageType] | AsyncKeyValueEngine[str, StorageType]
     _registry: ClassVar[dict[str, type] | None] = None
 
     def __init_subclass__(cls, **kwargs: object) -> None:
@@ -41,23 +41,23 @@ class BaseIndex[IdType: Hashable, ModelType, StorageType]:
             raise TypeError(f"{cls.__name__} key must be str, got {type(key).__name__}")
         registry = cls._registry
         if registry is None:
-            raise TypeError(f"{cls.__name__} must subclass Index or AsyncIndex")
+            raise TypeError(f"{cls.__name__} must subclass KeyValueIndex or AsyncKeyValueIndex")
         if key in registry:
             raise ValueError(f"index key {key!r} is already registered")
         registry[key] = cls
 
 
-def get_index(key: str) -> type[Index]:
-    """Return the sync index class registered for ``key``."""
+def get_key_value_index(key: str) -> type[KeyValueIndex]:
+    """Return the sync key-value index class registered for ``key``."""
     try:
         return _sync_indexes[key]
     except KeyError:
-        raise KeyError(f"no index registered for {key!r}") from None
+        raise KeyError(f"no key-value index registered for {key!r}") from None
 
 
-def get_async_index(key: str) -> type[AsyncIndex]:
-    """Return the async index class registered for ``key``."""
+def get_async_key_value_index(key: str) -> type[AsyncKeyValueIndex]:
+    """Return the async key-value index class registered for ``key``."""
     try:
         return _async_indexes[key]
     except KeyError:
-        raise KeyError(f"no async index registered for {key!r}") from None
+        raise KeyError(f"no async key-value index registered for {key!r}") from None

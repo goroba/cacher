@@ -3,10 +3,10 @@ from collections.abc import Sequence
 
 import fakeredis
 
-from cacher.engines.async_engine import AsyncEngine
-from cacher.engines.async_redis_hash_engine import AsyncRedisHashEngine
-from cacher.engines.engine import Engine
-from cacher.engines.redis_hash_engine import RedisHashEngine
+from cacher.engines.key_value.async_engine import AsyncKeyValueEngine
+from cacher.engines.key_value.async_redis_hash_engine import AsyncRedisHashEngine
+from cacher.engines.key_value.engine import KeyValueEngine
+from cacher.engines.key_value.redis_hash_engine import RedisHashEngine
 
 
 class _HashSpy:
@@ -32,7 +32,7 @@ class _HashSpy:
 def test_sync_hash_engine_round_trip() -> None:
     client = fakeredis.FakeRedis(decode_responses=True)
     engine = RedisHashEngine(client)
-    assert isinstance(engine, Engine)
+    assert isinstance(engine, KeyValueEngine)
 
     assert engine.get("users", "1") is None
     assert engine.exists("users", "1") is False
@@ -82,7 +82,7 @@ def test_async_hash_engine_round_trip() -> None:
     async def scenario() -> None:
         client = fakeredis.FakeAsyncRedis(decode_responses=True)
         engine = AsyncRedisHashEngine(client)
-        assert isinstance(engine, AsyncEngine)
+        assert isinstance(engine, AsyncKeyValueEngine)
         try:
             assert await engine.get("users", "1") is None
             assert await engine.exists("users", "1") is False
