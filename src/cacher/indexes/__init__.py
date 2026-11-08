@@ -1,6 +1,6 @@
 """Indexes bind a value to storage and register that binding by key."""
 
-from cacher.indexes.base import Index, get_async_index, get_index
+from cacher.indexes.base import Index, get_registry
 from cacher.indexes.key_value import (
     AsyncKeyValueIndex,
     KeyValueBase,
@@ -8,6 +8,7 @@ from cacher.indexes.key_value import (
     build_async_key_value_index,
     build_key_value_index,
 )
+from cacher.indexes.registry import IndexRegistry
 from cacher.indexes.sets import (
     AsyncSetIndex,
     SetBase,
@@ -20,6 +21,7 @@ __all__ = [
     "AsyncKeyValueIndex",
     "AsyncSetIndex",
     "Index",
+    "IndexRegistry",
     "KeyValueBase",
     "KeyValueIndex",
     "SetBase",
@@ -28,6 +30,5 @@ __all__ = [
     "build_async_set_index",
     "build_key_value_index",
     "build_set_index",
-    "get_async_index",
-    "get_index",
+    "get_registry",
 ]

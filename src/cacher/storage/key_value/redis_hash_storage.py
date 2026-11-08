@@ -6,36 +6,37 @@ from cacher.storage._redis import Redis, decode
 from cacher.storage.key_value.storage import KeyValueStorage
 
 
-class RedisHashStorage(KeyValueStorage[str, str]):
+class RedisHashStorage(KeyValueStorage[Redis, str, str]):
     """Synchronous Redis hashes. One instance can serve any hash name."""
 
-    def __init__(self, client: Redis) -> None:
-        self._client = client
+    def get(self, client: Redis, name: str, field: str) -> str | None:
+        return decode(client.hget(name, field))
 
-    def get(self, name: str, field: str) -> str | None:
-        return decode(self._client.hget(name, field))
-
-    def set(self, name: str, field: str, value: str, *, ttl: int | None = None) -> None:
-        self._client.hset(name, field, value)
+    def set(
+        self, client: Redis, name: str, field: str, value: str, *, ttl: int | None = None
+    ) -> None:
+        client.hset(name, field, value)
         if ttl is not None:
-            self._client.hexpire(name, ttl, field)
+            client.hexpire(name, ttl, field)
 
-    def delete(self, name: str, field: str) -> None:
-        self._client.hdel(name, field)
+    def delete(self, client: Redis, name: str, field: str) -> None:
+        client.hdel(name, field)
 
-    def exists(self, name: str, field: str) -> bool:
-        return bool(self._client.hexists(name, field))
+    def exists(self, client: Redis, name: str, field: str) -> bool:
+        return bool(client.hexists(name, field))
 
-    def mget(self, name: str, fields: Sequence[str]) -> list[str | None]:
+    def mget(self, client: Redis, name: str, fields: Sequence[str]) -> list[str | None]:
         if not fields:
             return []
-        raw_values = self._client.hmget(name, list(fields))
+        raw_values = client.hmget(name, list(fields))
         return [decode(raw) for raw in raw_values]
 
-    def mset(self, name: str, items: Mapping[str, str], *, ttl: int | None = None) -> None:
+    def mset(
+        self, client: Redis, name: str, items: Mapping[str, str], *, ttl: int | None = None
+    ) -> None:
         if not items:
             return
         mapping = dict(items)
-        self._client.hset(name, mapping=mapping)
+        client.hset(name, mapping=mapping)
         if ttl is not None:
-            self._client.hexpire(name, ttl, *mapping)
+            client.hexpire(name, ttl, *mapping)

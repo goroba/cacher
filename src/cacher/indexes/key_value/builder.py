@@ -1,16 +1,17 @@
 """Build a registered key-value index from its parts and check that those parts agree."""
 
 from collections.abc import Hashable
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 from cacher.indexes._builder import (
     check_key,
     check_storage_type,
     check_value_type,
-    construct_serializer,
     index_class,
+    instance_class,
     protocol_args,
     serializer_types,
+    storage_client_type,
 )
 from cacher.indexes.key_value.async_index import AsyncKeyValueIndex
 from cacher.indexes.key_value.index import KeyValueIndex
@@ -19,62 +20,27 @@ from cacher.storage.key_value.async_storage import AsyncKeyValueStorage
 from cacher.storage.key_value.storage import KeyValueStorage
 
 
-class _SyncIndexFactory[
-    IdType: Hashable,
-    ModelType,
-    StorageType,
-    Storage: KeyValueStorage[str, StorageType],
-](Protocol):
-    """Sync key-value index class. Call it with a storage instance."""
-
-    identifier: type[IdType]
-    model: type[ModelType]
-    serializer: Serializer[ModelType, StorageType]
-    key: str
-    storage: type[Storage]
-
-    def __call__(self, storage: Storage) -> KeyValueIndex[IdType, ModelType, StorageType]: ...
-
-
-class _AsyncIndexFactory[
-    IdType: Hashable,
-    ModelType,
-    StorageType,
-    Storage: AsyncKeyValueStorage[str, StorageType],
-](Protocol):
-    """Async key-value index class. Call it with a storage instance."""
-
-    identifier: type[IdType]
-    model: type[ModelType]
-    serializer: Serializer[ModelType, StorageType]
-    key: str
-    storage: type[Storage]
-
-    def __call__(
-        self, storage: Storage
-    ) -> AsyncKeyValueIndex[IdType, ModelType, StorageType]: ...
-
-
 def build_key_value_index[
+    ClientType,
     IdType: Hashable,
     ModelType,
     StorageType,
-    Storage: KeyValueStorage[str, StorageType],
+    Storage: KeyValueStorage[ClientType, str, StorageType],
 ](
     key: str,
     *,
     id_type: type[IdType],
     model_type: type[ModelType],
-    serializer: type[Serializer[ModelType, StorageType]],
-    storage: type[Storage],
-) -> _SyncIndexFactory[IdType, ModelType, StorageType, Storage]:
+    serializer: Serializer[ModelType, StorageType],
+    storage: Storage,
+) -> KeyValueIndex[ClientType, IdType, ModelType, StorageType]:
     """Register a sync key-value index whose id, model, serializer, and storage types agree.
 
-    The serializer is constructed here. Call the result with a storage instance;
-    the storage's own constructor arguments stay with the caller.
+    ``serializer`` and ``storage`` are instances. The returned index is registered
+    and ready to use. Pass the storage client to each index method.
     """
     return cast(
-        _SyncIndexFactory[IdType, ModelType, StorageType, Storage],
+        KeyValueIndex[ClientType, IdType, ModelType, StorageType],
         _build(
             key,
             id_type=id_type,
@@ -89,25 +55,26 @@ def build_key_value_index[
 
 
 def build_async_key_value_index[
+    ClientType,
     IdType: Hashable,
     ModelType,
     StorageType,
-    Storage: AsyncKeyValueStorage[str, StorageType],
+    Storage: AsyncKeyValueStorage[ClientType, str, StorageType],
 ](
     key: str,
     *,
     id_type: type[IdType],
     model_type: type[ModelType],
-    serializer: type[Serializer[ModelType, StorageType]],
-    storage: type[Storage],
-) -> _AsyncIndexFactory[IdType, ModelType, StorageType, Storage]:
+    serializer: Serializer[ModelType, StorageType],
+    storage: Storage,
+) -> AsyncKeyValueIndex[ClientType, IdType, ModelType, StorageType]:
     """Register an async key-value index whose id, model, serializer, and storage types agree.
 
-    The serializer is constructed here. Call the result with a storage instance;
-    the storage's own constructor arguments stay with the caller.
+    ``serializer`` and ``storage`` are instances. The returned index is registered
+    and ready to use. Pass the storage client to each index method.
     """
     return cast(
-        _AsyncIndexFactory[IdType, ModelType, StorageType, Storage],
+        AsyncKeyValueIndex[ClientType, IdType, ModelType, StorageType],
         _build(
             key,
             id_type=id_type,
@@ -128,24 +95,26 @@ def _build(
     model_type: Any,
     serializer: Any,
     storage: Any,
-    base: type[KeyValueIndex[Any, Any, Any]] | type[AsyncKeyValueIndex[Any, Any, Any]],
-    protocol: type[KeyValueStorage[Any, Any]] | type[AsyncKeyValueStorage[Any, Any]],
-    other: type[KeyValueStorage[Any, Any]] | type[AsyncKeyValueStorage[Any, Any]],
-) -> type:
+    base: type[KeyValueIndex[Any, Any, Any, Any]] | type[AsyncKeyValueIndex[Any, Any, Any, Any]],
+    protocol: type[KeyValueStorage[Any, Any, Any]] | type[AsyncKeyValueStorage[Any, Any, Any]],
+    other: type[KeyValueStorage[Any, Any, Any]] | type[AsyncKeyValueStorage[Any, Any, Any]],
+) -> Any:
     check_key(key)
     _check_id_type(key, id_type)
-    value_type, serializer_storage = serializer_types(key, serializer)
+    serializer_cls = instance_class(key, serializer, label="serializer")
+    value_type, serializer_storage = serializer_types(key, serializer_cls)
     check_value_type(key, model_type, value_type, label="model type")
-    storage_type = _storage_type(key, storage, protocol, other)
-    check_storage_type(key, serializer_storage, storage_type, storage)
-    serializer_instance = construct_serializer(key, serializer, model_type)
+    storage_cls = instance_class(key, storage, label="storage")
+    storage_type = _storage_type(key, storage_cls, protocol, other)
+    check_storage_type(key, serializer_storage, storage_type, storage_cls)
+    client_type = storage_client_type(key, storage_cls, protocol)
     return index_class(
         key,
-        serializer_instance=serializer_instance,
+        serializer_instance=serializer,
         storage=storage,
         base=base,
         module=__name__,
-        attributes={"identifier": id_type, "model": model_type},
+        attributes={"identifier": id_type, "model": model_type, "client_type": client_type},
     )
 
 
@@ -157,14 +126,12 @@ def _check_id_type(key: str, id_type: Any) -> None:
 
 def _storage_type(
     key: str,
-    storage: Any,
+    storage: type,
     protocol: type,
     other: type,
 ) -> Any:
-    if not isinstance(storage, type):
-        raise TypeError(f"index {key!r}: storage must be a class, got {type(storage).__name__}")
     args = protocol_args(storage, protocol)
-    if args is None or len(args) != 2:
+    if args is None or len(args) != 3:
         if protocol_args(storage, other) is not None:
             if protocol is KeyValueStorage:
                 raise TypeError(
@@ -177,9 +144,9 @@ def _storage_type(
             )
         raise TypeError(
             f"index {key!r}: {storage.__name__} does not declare "
-            f"{protocol.__name__}[FieldType, StorageType]"
+            f"{protocol.__name__}[ClientType, FieldType, StorageType]"
         )
-    field_type, storage_type = args
+    field_type, storage_type = args[1:]
     if field_type is not str:
         raise TypeError(
             f"index {key!r}: {storage.__name__} field type must be str, got {field_type!r}"

@@ -1,16 +1,17 @@
 """Build a registered set index from its parts and check that those parts agree."""
 
 from collections.abc import Hashable
-from typing import Any, Protocol, cast
+from typing import Any, cast
 
 from cacher.indexes._builder import (
     check_key,
     check_storage_type,
     check_value_type,
-    construct_serializer,
     index_class,
+    instance_class,
     protocol_args,
     serializer_types,
+    storage_client_type,
 )
 from cacher.indexes.sets.async_index import AsyncSetIndex
 from cacher.indexes.sets.index import SetIndex
@@ -19,54 +20,25 @@ from cacher.storage.sets.async_storage import AsyncSetStorage
 from cacher.storage.sets.storage import SetStorage
 
 
-class _SyncSetIndexFactory[
-    MemberType,
-    StorageType: Hashable,
-    Storage: SetStorage[StorageType],
-](Protocol):
-    """Sync set index class. Call it with a storage instance."""
-
-    member: type[MemberType]
-    serializer: Serializer[MemberType, StorageType]
-    key: str
-    storage: type[Storage]
-
-    def __call__(self, storage: Storage) -> SetIndex[MemberType, StorageType]: ...
-
-
-class _AsyncSetIndexFactory[
-    MemberType,
-    StorageType: Hashable,
-    Storage: AsyncSetStorage[StorageType],
-](Protocol):
-    """Async set index class. Call it with a storage instance."""
-
-    member: type[MemberType]
-    serializer: Serializer[MemberType, StorageType]
-    key: str
-    storage: type[Storage]
-
-    def __call__(self, storage: Storage) -> AsyncSetIndex[MemberType, StorageType]: ...
-
-
 def build_set_index[
+    ClientType,
     MemberType,
     StorageType: Hashable,
-    Storage: SetStorage[StorageType],
+    Storage: SetStorage[ClientType, StorageType],
 ](
     key: str,
     *,
     member_type: type[MemberType],
-    serializer: type[Serializer[MemberType, StorageType]],
-    storage: type[Storage],
-) -> _SyncSetIndexFactory[MemberType, StorageType, Storage]:
+    serializer: Serializer[MemberType, StorageType],
+    storage: Storage,
+) -> SetIndex[ClientType, MemberType, StorageType]:
     """Register a sync set index whose member, serializer, and storage types agree.
 
-    The serializer is constructed here. Call the result with a storage instance;
-    the storage's own constructor arguments stay with the caller.
+    ``serializer`` and ``storage`` are instances. The returned index is registered
+    and ready to use. Pass the storage client to each index method.
     """
     return cast(
-        _SyncSetIndexFactory[MemberType, StorageType, Storage],
+        SetIndex[ClientType, MemberType, StorageType],
         _build(
             key,
             member_type=member_type,
@@ -80,23 +52,24 @@ def build_set_index[
 
 
 def build_async_set_index[
+    ClientType,
     MemberType,
     StorageType: Hashable,
-    Storage: AsyncSetStorage[StorageType],
+    Storage: AsyncSetStorage[ClientType, StorageType],
 ](
     key: str,
     *,
     member_type: type[MemberType],
-    serializer: type[Serializer[MemberType, StorageType]],
-    storage: type[Storage],
-) -> _AsyncSetIndexFactory[MemberType, StorageType, Storage]:
+    serializer: Serializer[MemberType, StorageType],
+    storage: Storage,
+) -> AsyncSetIndex[ClientType, MemberType, StorageType]:
     """Register an async set index whose member, serializer, and storage types agree.
 
-    The serializer is constructed here. Call the result with a storage instance;
-    the storage's own constructor arguments stay with the caller.
+    ``serializer`` and ``storage`` are instances. The returned index is registered
+    and ready to use. Pass the storage client to each index method.
     """
     return cast(
-        _AsyncSetIndexFactory[MemberType, StorageType, Storage],
+        AsyncSetIndex[ClientType, MemberType, StorageType],
         _build(
             key,
             member_type=member_type,
@@ -115,36 +88,36 @@ def _build(
     member_type: Any,
     serializer: Any,
     storage: Any,
-    base: type[SetIndex[Any, Any]] | type[AsyncSetIndex[Any, Any]],
-    protocol: type[SetStorage[Any]] | type[AsyncSetStorage[Any]],
-    other: type[SetStorage[Any]] | type[AsyncSetStorage[Any]],
-) -> type:
+    base: type[SetIndex[Any, Any, Any]] | type[AsyncSetIndex[Any, Any, Any]],
+    protocol: type[SetStorage[Any, Any]] | type[AsyncSetStorage[Any, Any]],
+    other: type[SetStorage[Any, Any]] | type[AsyncSetStorage[Any, Any]],
+) -> Any:
     check_key(key)
-    value_type, serializer_storage = serializer_types(key, serializer)
+    serializer_cls = instance_class(key, serializer, label="serializer")
+    value_type, serializer_storage = serializer_types(key, serializer_cls)
     check_value_type(key, member_type, value_type, label="member type")
-    storage_type = _storage_type(key, storage, protocol, other)
-    check_storage_type(key, serializer_storage, storage_type, storage)
-    serializer_instance = construct_serializer(key, serializer, member_type)
+    storage_cls = instance_class(key, storage, label="storage")
+    storage_type = _storage_type(key, storage_cls, protocol, other)
+    check_storage_type(key, serializer_storage, storage_type, storage_cls)
+    client_type = storage_client_type(key, storage_cls, protocol)
     return index_class(
         key,
-        serializer_instance=serializer_instance,
+        serializer_instance=serializer,
         storage=storage,
         base=base,
         module=__name__,
-        attributes={"member": member_type},
+        attributes={"member": member_type, "client_type": client_type},
     )
 
 
 def _storage_type(
     key: str,
-    storage: Any,
+    storage: type,
     protocol: type,
     other: type,
 ) -> Any:
-    if not isinstance(storage, type):
-        raise TypeError(f"index {key!r}: storage must be a class, got {type(storage).__name__}")
     args = protocol_args(storage, protocol)
-    if args is None or len(args) != 1:
+    if args is None or len(args) != 2:
         if protocol_args(storage, other) is not None:
             if protocol is SetStorage:
                 raise TypeError(
@@ -156,6 +129,7 @@ def _storage_type(
                 "build_async_set_index requires AsyncSetStorage"
             )
         raise TypeError(
-            f"index {key!r}: {storage.__name__} does not declare {protocol.__name__}[MemberType]"
+            f"index {key!r}: {storage.__name__} does not declare "
+            f"{protocol.__name__}[ClientType, MemberType]"
         )
-    return args[0]
+    return args[1]

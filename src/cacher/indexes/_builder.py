@@ -1,15 +1,21 @@
 """Shared checks for building a registered index."""
 
-import inspect
 import types
 from typing import Any, Generic, Protocol, TypeVar, get_args, get_origin
 
+from cacher.indexes.base import get_registry
 from cacher.serializers.serializer import Serializer
 
 
 def check_key(key: str) -> None:
     if not isinstance(key, str) or key == "":
         raise TypeError(f"index key must be a non-empty str, got {key!r}")
+
+
+def instance_class(key: str, value: Any, *, label: str) -> type:
+    if isinstance(value, type):
+        raise TypeError(f"index {key!r}: {label} must be an instance, got class {value.__name__}")
+    return type(value)
 
 
 def serializer_types(key: str, serializer: Any) -> tuple[Any, Any]:
@@ -33,6 +39,14 @@ def check_value_type(key: str, declared: Any, value_type: Any, *, label: str) ->
         f"index {key!r}: {label} {declared!r} does not match "
         f"serializer value type {value_type!r}"
     )
+
+
+def storage_client_type(key: str, storage: Any, protocol: type) -> type:
+    args = protocol_args(storage, protocol)
+    if args and isinstance(args[0], type):
+        return args[0]
+    name = storage.__name__ if isinstance(storage, type) else type(storage).__name__
+    raise TypeError(f"index {key!r}: {name} client type must be a class")
 
 
 def check_storage_type(key: str, serializer_storage: Any, storage_type: Any, storage: Any) -> None:
@@ -62,42 +76,25 @@ def protocol_args(cls: Any, protocol: type) -> tuple[Any, ...] | None:
     return _walk_protocol_args(cls, protocol, {}, ())
 
 
-def construct_serializer(key: str, serializer: type, value_type: Any) -> Any:
-    required = _required_parameters(serializer)
-    if not required:
-        return serializer()
-    if len(required) == 1 and required[0].kind is not inspect.Parameter.KEYWORD_ONLY:
-        return serializer(value_type)
-    raise TypeError(
-        f"index {key!r}: {serializer.__name__} cannot be built from the value type alone"
-    )
-
-
 def index_class(
     key: str,
     *,
     serializer_instance: Any,
-    storage: type,
+    storage: Any,
     base: type,
     module: str,
     attributes: dict[str, Any],
-) -> type:
+) -> Any:
     suffix = "".join(char if char.isalnum() else "_" for char in key)
-
-    def __init__(self: Any, storage_instance: object) -> None:
-        if not isinstance(storage_instance, storage):
-            raise TypeError(f"expected {storage.__name__}, got {type(storage_instance).__name__}")
-        self.storage = storage_instance
-
     namespace: dict[str, Any] = {
         "__module__": module,
         "serializer": serializer_instance,
         "key": key,
         "storage": storage,
-        "__init__": __init__,
     }
     namespace.update(attributes)
-    return type(f"{base.__name__}_{suffix}", (base,), namespace)
+    type(f"{base.__name__}_{suffix}", (base,), namespace)
+    return get_registry(attributes["client_type"]).get(key)
 
 
 def _is_subclass(declared: Any, parent: Any) -> bool:
@@ -160,22 +157,3 @@ def _substitute(tp: Any, subst: dict[Any, Any]) -> Any:
     except TypeError:
         return tp
 
-
-def _required_parameters(cls: type) -> list[inspect.Parameter]:
-    try:
-        signature = inspect.signature(cls.__init__)
-    except (TypeError, ValueError):
-        return []
-    parameters = [
-        parameter
-        for parameter in signature.parameters.values()
-        if parameter.kind
-        in {
-            inspect.Parameter.POSITIONAL_ONLY,
-            inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            inspect.Parameter.KEYWORD_ONLY,
-        }
-    ]
-    if parameters and parameters[0].name == "self":
-        parameters = parameters[1:]
-    return [parameter for parameter in parameters if parameter.default is inspect.Parameter.empty]

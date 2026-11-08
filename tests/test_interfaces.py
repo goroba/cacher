@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Mapping, Sequence
 
 import pytest
@@ -10,17 +11,48 @@ from cacher import (
     KeyValueIndex,
     KeyValueStorage,
     SetStorage,
-    get_async_index,
-    get_index,
+    get_registry,
 )
 
 
-class UserStorage:
+class UserClient:
     pass
+
+
+class AsyncUserClient:
+    pass
+
+
+class UserStorage:
+    def __init__(self) -> None:
+        self.data: dict[tuple[str, str], str] = {}
+
+    def get(self, client: UserClient, name: str, field: str) -> str | None:
+        return self.data.get((name, field))
+
+    def set(
+        self, client: UserClient, name: str, field: str, value: str, *, ttl: int | None = None
+    ) -> None:
+        self.data[(name, field)] = value
 
 
 class AsyncUserStorage:
-    pass
+    def __init__(self) -> None:
+        self.data: dict[tuple[str, str], str] = {}
+
+    async def get(self, client: AsyncUserClient, name: str, field: str) -> str | None:
+        return self.data.get((name, field))
+
+    async def set(
+        self,
+        client: AsyncUserClient,
+        name: str,
+        field: str,
+        value: str,
+        *,
+        ttl: int | None = None,
+    ) -> None:
+        self.data[(name, field)] = value
 
 
 user_storage = UserStorage()
@@ -32,6 +64,7 @@ class UserIndex(KeyValueIndex):
     model = int
     serializer = IntSerializer()
     key = "users"
+    client_type = UserClient
     storage = user_storage
 
 
@@ -40,6 +73,7 @@ class AsyncUserIndex(AsyncKeyValueIndex):
     model = int
     serializer = IntSerializer()
     key = "users"
+    client_type = AsyncUserClient
     storage = async_user_storage
 
 
@@ -49,17 +83,50 @@ class IncompleteIndex:
 
 
 def test_index_registry() -> None:
-    assert isinstance(UserIndex(), KeyValueIndex)
-    assert isinstance(AsyncUserIndex(), AsyncKeyValueIndex)
-    assert UserIndex.storage is user_storage
-    assert AsyncUserIndex.storage is async_user_storage
+    index = get_registry(UserClient).get("users")
+    async_index = get_registry(AsyncUserClient).get("users")
+    assert isinstance(index, UserIndex)
+    assert isinstance(async_index, AsyncUserIndex)
+    assert isinstance(index, KeyValueIndex)
+    assert isinstance(async_index, AsyncKeyValueIndex)
+    assert index.storage is user_storage
+    assert async_index.storage is async_user_storage
     assert not isinstance(IncompleteIndex(), KeyValueIndex)
-    assert get_index("users") is UserIndex
-    assert get_async_index("users") is AsyncUserIndex
     with pytest.raises(KeyError):
-        get_index("missing")
+        get_registry(UserClient).get("missing")
     with pytest.raises(KeyError):
-        get_async_index("missing")
+        get_registry(AsyncUserClient).get("missing")
+
+    client = UserClient()
+    assert index.get(client, 1) is None
+    index.set(client, 1, 7)
+    assert index.get(client, 1) == 7
+
+    async def scenario() -> None:
+        async_client = AsyncUserClient()
+        assert await async_index.get(async_client, 1) is None
+        await async_index.set(async_client, 1, 8)
+        assert await async_index.get(async_client, 1) == 8
+
+    asyncio.run(scenario())
+
+
+class UnusedClient:
+    pass
+
+
+def test_get_registry() -> None:
+    assert isinstance(get_registry(UserClient).get("users"), UserIndex)
+    assert isinstance(get_registry(AsyncUserClient).get("users"), AsyncUserIndex)
+    with pytest.raises(KeyError, match="no index 'missing' registered for UserClient"):
+        get_registry(UserClient).get("missing")
+    with pytest.raises(KeyError, match="no index 'missing' registered for AsyncUserClient"):
+        get_registry(AsyncUserClient).get("missing")
+
+
+def test_unknown_client_has_no_registry() -> None:
+    with pytest.raises(KeyError, match="no indexes registered for UnusedClient"):
+        get_registry(UnusedClient)
 
 
 def test_duplicate_index_key() -> None:
@@ -69,6 +136,7 @@ def test_duplicate_index_key() -> None:
             model = int
             serializer = IntSerializer()
             key = "users"
+            client_type = UserClient
             storage = UserStorage()
     with pytest.raises(ValueError):
         class DuplicateAsyncUserIndex(AsyncKeyValueIndex):
@@ -76,80 +144,89 @@ def test_duplicate_index_key() -> None:
             model = int
             serializer = IntSerializer()
             key = "users"
+            client_type = AsyncUserClient
             storage = AsyncUserStorage()
 
 
 class MemoryHash:
-    def get(self, name: str, field: str) -> str | None:
+    def get(self, client: object, name: str, field: str) -> str | None:
         return None
 
-    def set(self, name: str, field: str, value: str, *, ttl: int | None = None) -> None:
+    def set(
+        self, client: object, name: str, field: str, value: str, *, ttl: int | None = None
+    ) -> None:
         return None
 
-    def delete(self, name: str, field: str) -> None:
+    def delete(self, client: object, name: str, field: str) -> None:
         return None
 
-    def exists(self, name: str, field: str) -> bool:
+    def exists(self, client: object, name: str, field: str) -> bool:
         return False
 
-    def mget(self, name: str, fields: Sequence[str]) -> list[str | None]:
+    def mget(self, client: object, name: str, fields: Sequence[str]) -> list[str | None]:
         return [None for _ in fields]
 
-    def mset(self, name: str, items: Mapping[str, str], *, ttl: int | None = None) -> None:
+    def mset(
+        self, client: object, name: str, items: Mapping[str, str], *, ttl: int | None = None
+    ) -> None:
         return None
 
 
 class AsyncMemoryHash:
-    async def get(self, name: str, field: str) -> str | None:
+    async def get(self, client: object, name: str, field: str) -> str | None:
         return None
 
-    async def set(self, name: str, field: str, value: str, *, ttl: int | None = None) -> None:
+    async def set(
+        self, client: object, name: str, field: str, value: str, *, ttl: int | None = None
+    ) -> None:
         return None
 
-    async def delete(self, name: str, field: str) -> None:
+    async def delete(self, client: object, name: str, field: str) -> None:
         return None
 
-    async def exists(self, name: str, field: str) -> bool:
+    async def exists(self, client: object, name: str, field: str) -> bool:
         return False
 
-    async def mget(self, name: str, fields: Sequence[str]) -> list[str | None]:
+    async def mget(self, client: object, name: str, fields: Sequence[str]) -> list[str | None]:
         return [None for _ in fields]
 
-    async def mset(self, name: str, items: Mapping[str, str], *, ttl: int | None = None) -> None:
+    async def mset(
+        self, client: object, name: str, items: Mapping[str, str], *, ttl: int | None = None
+    ) -> None:
         return None
 
 
 class MemorySet:
-    def add(self, name: str, member: str) -> None:
+    def add(self, client: object, name: str, member: str) -> None:
         return None
 
-    def madd(self, name: str, members: Sequence[str]) -> None:
+    def madd(self, client: object, name: str, members: Sequence[str]) -> None:
         return None
 
-    def remove(self, name: str, member: str) -> None:
+    def remove(self, client: object, name: str, member: str) -> None:
         return None
 
-    def mremove(self, name: str, members: Sequence[str]) -> None:
+    def mremove(self, client: object, name: str, members: Sequence[str]) -> None:
         return None
 
-    def contains(self, name: str, member: str) -> bool:
+    def contains(self, client: object, name: str, member: str) -> bool:
         return False
 
 
 class AsyncMemorySet:
-    async def add(self, name: str, member: str) -> None:
+    async def add(self, client: object, name: str, member: str) -> None:
         return None
 
-    async def madd(self, name: str, members: Sequence[str]) -> None:
+    async def madd(self, client: object, name: str, members: Sequence[str]) -> None:
         return None
 
-    async def remove(self, name: str, member: str) -> None:
+    async def remove(self, client: object, name: str, member: str) -> None:
         return None
 
-    async def mremove(self, name: str, members: Sequence[str]) -> None:
+    async def mremove(self, client: object, name: str, members: Sequence[str]) -> None:
         return None
 
-    async def contains(self, name: str, member: str) -> bool:
+    async def contains(self, client: object, name: str, member: str) -> bool:
         return False
 
 

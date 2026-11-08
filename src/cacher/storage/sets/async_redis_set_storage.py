@@ -6,27 +6,24 @@ from cacher.storage._redis import AsyncRedis
 from cacher.storage.sets.async_storage import AsyncSetStorage
 
 
-class AsyncRedisSetStorage(AsyncSetStorage[str]):
+class AsyncRedisSetStorage(AsyncSetStorage[AsyncRedis, str]):
     """Asynchronous Redis sets. ``name`` is the Redis key."""
 
-    def __init__(self, client: AsyncRedis) -> None:
-        self._client = client
+    async def add(self, client: AsyncRedis, name: str, member: str) -> None:
+        await client.sadd(name, member)
 
-    async def add(self, name: str, member: str) -> None:
-        await self._client.sadd(name, member)
-
-    async def madd(self, name: str, members: Sequence[str]) -> None:
+    async def madd(self, client: AsyncRedis, name: str, members: Sequence[str]) -> None:
         if not members:
             return
-        await self._client.sadd(name, *members)
+        await client.sadd(name, *members)
 
-    async def remove(self, name: str, member: str) -> None:
-        await self._client.srem(name, member)
+    async def remove(self, client: AsyncRedis, name: str, member: str) -> None:
+        await client.srem(name, member)
 
-    async def mremove(self, name: str, members: Sequence[str]) -> None:
+    async def mremove(self, client: AsyncRedis, name: str, members: Sequence[str]) -> None:
         if not members:
             return
-        await self._client.srem(name, *members)
+        await client.srem(name, *members)
 
-    async def contains(self, name: str, member: str) -> bool:
-        return bool(await self._client.sismember(name, member))
+    async def contains(self, client: AsyncRedis, name: str, member: str) -> bool:
+        return bool(await client.sismember(name, member))

@@ -1,5 +1,4 @@
 import asyncio
-from collections.abc import Sequence
 
 import fakeredis
 
@@ -23,66 +22,66 @@ class _SetSpy:
 
 def test_sync_set_storage_round_trip() -> None:
     client = fakeredis.FakeRedis(decode_responses=True)
-    storage = RedisSetStorage(client)
+    storage = RedisSetStorage()
     assert isinstance(storage, SetStorage)
 
-    assert storage.contains("users", "1") is False
-    storage.remove("users", "1")
-    assert storage.contains("users", "1") is False
+    assert storage.contains(client, "users", "1") is False
+    storage.remove(client, "users", "1")
+    assert storage.contains(client, "users", "1") is False
 
-    storage.add("users", "1")
-    storage.add("users", "1")
-    assert storage.contains("users", "1") is True
+    storage.add(client, "users", "1")
+    storage.add(client, "users", "1")
+    assert storage.contains(client, "users", "1") is True
     assert client.sismember("users", "1") == 1
 
-    storage.madd("users", ["3", "2"])
-    assert storage.contains("users", "2") is True
-    assert storage.contains("users", "3") is True
+    storage.madd(client, "users", ["3", "2"])
+    assert storage.contains(client, "users", "2") is True
+    assert storage.contains(client, "users", "3") is True
     assert client.smembers("users") == {"1", "2", "3"}
 
-    storage.mremove("users", ["1", "3"])
-    assert storage.contains("users", "1") is False
-    assert storage.contains("users", "3") is False
-    assert storage.contains("users", "2") is True
-    storage.remove("users", "2")
-    assert storage.contains("users", "2") is False
+    storage.mremove(client, "users", ["1", "3"])
+    assert storage.contains(client, "users", "1") is False
+    assert storage.contains(client, "users", "3") is False
+    assert storage.contains(client, "users", "2") is True
+    storage.remove(client, "users", "2")
+    assert storage.contains(client, "users", "2") is False
 
 
 def test_sync_set_storage_empty_batches_do_not_call_redis() -> None:
     spy = _SetSpy()
-    storage = RedisSetStorage(spy)  # type: ignore[arg-type]
+    storage = RedisSetStorage()
 
-    storage.madd("users", [])
-    storage.mremove("users", [])
+    storage.madd(spy, "users", [])  # type: ignore[arg-type]
+    storage.mremove(spy, "users", [])  # type: ignore[arg-type]
     assert spy.called is False
 
 
 def test_async_set_storage_round_trip() -> None:
     async def scenario() -> None:
         client = fakeredis.FakeAsyncRedis(decode_responses=True)
-        storage = AsyncRedisSetStorage(client)
+        storage = AsyncRedisSetStorage()
         assert isinstance(storage, AsyncSetStorage)
         try:
-            assert await storage.contains("users", "1") is False
-            await storage.remove("users", "1")
-            assert await storage.contains("users", "1") is False
+            assert await storage.contains(client, "users", "1") is False
+            await storage.remove(client, "users", "1")
+            assert await storage.contains(client, "users", "1") is False
 
-            await storage.add("users", "1")
-            await storage.add("users", "1")
-            assert await storage.contains("users", "1") is True
+            await storage.add(client, "users", "1")
+            await storage.add(client, "users", "1")
+            assert await storage.contains(client, "users", "1") is True
             assert await client.sismember("users", "1") == 1
 
-            await storage.madd("users", ["3", "2"])
-            assert await storage.contains("users", "2") is True
-            assert await storage.contains("users", "3") is True
+            await storage.madd(client, "users", ["3", "2"])
+            assert await storage.contains(client, "users", "2") is True
+            assert await storage.contains(client, "users", "3") is True
             assert await client.smembers("users") == {"1", "2", "3"}
 
-            await storage.mremove("users", ["1", "3"])
-            assert await storage.contains("users", "1") is False
-            assert await storage.contains("users", "3") is False
-            assert await storage.contains("users", "2") is True
-            await storage.remove("users", "2")
-            assert await storage.contains("users", "2") is False
+            await storage.mremove(client, "users", ["1", "3"])
+            assert await storage.contains(client, "users", "1") is False
+            assert await storage.contains(client, "users", "3") is False
+            assert await storage.contains(client, "users", "2") is True
+            await storage.remove(client, "users", "2")
+            assert await storage.contains(client, "users", "2") is False
         finally:
             await client.aclose()
 
@@ -91,11 +90,11 @@ def test_async_set_storage_round_trip() -> None:
 
 def test_async_set_storage_empty_batches_do_not_call_redis() -> None:
     spy = _SetSpy()
-    storage = AsyncRedisSetStorage(spy)  # type: ignore[arg-type]
+    storage = AsyncRedisSetStorage()
 
     async def scenario() -> None:
-        await storage.madd("users", [])
-        await storage.mremove("users", [])
+        await storage.madd(spy, "users", [])  # type: ignore[arg-type]
+        await storage.mremove(spy, "users", [])  # type: ignore[arg-type]
 
     asyncio.run(scenario())
     assert spy.called is False

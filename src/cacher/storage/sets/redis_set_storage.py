@@ -6,27 +6,24 @@ from cacher.storage._redis import Redis
 from cacher.storage.sets.storage import SetStorage
 
 
-class RedisSetStorage(SetStorage[str]):
+class RedisSetStorage(SetStorage[Redis, str]):
     """Synchronous Redis sets. ``name`` is the Redis key."""
 
-    def __init__(self, client: Redis) -> None:
-        self._client = client
+    def add(self, client: Redis, name: str, member: str) -> None:
+        client.sadd(name, member)
 
-    def add(self, name: str, member: str) -> None:
-        self._client.sadd(name, member)
-
-    def madd(self, name: str, members: Sequence[str]) -> None:
+    def madd(self, client: Redis, name: str, members: Sequence[str]) -> None:
         if not members:
             return
-        self._client.sadd(name, *members)
+        client.sadd(name, *members)
 
-    def remove(self, name: str, member: str) -> None:
-        self._client.srem(name, member)
+    def remove(self, client: Redis, name: str, member: str) -> None:
+        client.srem(name, member)
 
-    def mremove(self, name: str, members: Sequence[str]) -> None:
+    def mremove(self, client: Redis, name: str, members: Sequence[str]) -> None:
         if not members:
             return
-        self._client.srem(name, *members)
+        client.srem(name, *members)
 
-    def contains(self, name: str, member: str) -> bool:
-        return bool(self._client.sismember(name, member))
+    def contains(self, client: Redis, name: str, member: str) -> bool:
+        return bool(client.sismember(name, member))

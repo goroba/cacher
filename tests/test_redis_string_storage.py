@@ -24,84 +24,89 @@ class _MgetSpy:
 
 def test_sync_storage_round_trip() -> None:
     client = fakeredis.FakeRedis(decode_responses=True)
-    storage = RedisStringStorage(client)
+    storage = RedisStringStorage()
 
     assert isinstance(storage, KeyValueStorage)
-    assert storage.get(_NAME, "missing") is None
-    assert storage.exists(_NAME, "missing") is False
-    storage.delete(_NAME, "missing")
+    assert storage.get(client, _NAME, "missing") is None
+    assert storage.exists(client, _NAME, "missing") is False
+    storage.delete(client, _NAME, "missing")
 
-    storage.set(_NAME, "a", "1", ttl=10)
-    assert storage.get(_NAME, "a") == "1"
-    assert storage.exists(_NAME, "a") is True
+    storage.set(client, _NAME, "a", "1", ttl=10)
+    assert storage.get(client, _NAME, "a") == "1"
+    assert storage.exists(client, _NAME, "a") is True
     assert client.get("users:a") == "1"
     assert 0 < client.ttl("users:a") <= 10
 
-    storage.mset(_NAME, {"b": "2", "c": "3"})
+    storage.mset(client, _NAME, {"b": "2", "c": "3"})
     assert client.ttl("users:b") == -1
-    assert storage.mget(_NAME, ["b", "a", "b", "missing"]) == ["2", "1", "2", None]
+    assert storage.mget(client, _NAME, ["b", "a", "b", "missing"]) == ["2", "1", "2", None]
 
-    storage.mset(_NAME, {"b": "20", "c": "30"}, ttl=5)
-    assert storage.get(_NAME, "b") == "20"
+    storage.mset(client, _NAME, {"b": "20", "c": "30"}, ttl=5)
+    assert storage.get(client, _NAME, "b") == "20"
     assert client.get("users:b") == "20"
     assert client.get("users:c") == "30"
     assert 0 < client.ttl("users:b") <= 5
     assert 0 < client.ttl("users:c") <= 5
 
-    storage.delete(_NAME, "a")
-    assert storage.get(_NAME, "a") is None
-    assert storage.exists(_NAME, "a") is False
+    storage.delete(client, _NAME, "a")
+    assert storage.get(client, _NAME, "a") is None
+    assert storage.exists(client, _NAME, "a") is False
 
 
 def test_sync_storage_empty_batches_do_not_call_redis() -> None:
     spy = _MgetSpy()
-    storage = RedisStringStorage(spy)  # type: ignore[arg-type]
+    storage = RedisStringStorage()
 
-    assert storage.mget(_NAME, []) == []
-    storage.mset(_NAME, {})
+    assert storage.mget(spy, _NAME, []) == []  # type: ignore[arg-type]
+    storage.mset(spy, _NAME, {})  # type: ignore[arg-type]
     assert spy.called is False
 
 
 def test_sync_storage_decodes_bytes() -> None:
     client = fakeredis.FakeRedis(decode_responses=False)
-    storage = RedisStringStorage(client)
+    storage = RedisStringStorage()
 
-    storage.set(_NAME, "a", "hello")
+    storage.set(client, _NAME, "a", "hello")
     assert client.get("users:a") == b"hello"
-    assert storage.get(_NAME, "a") == "hello"
-    assert storage.mget(_NAME, ["a", "missing"]) == ["hello", None]
+    assert storage.get(client, _NAME, "a") == "hello"
+    assert storage.mget(client, _NAME, ["a", "missing"]) == ["hello", None]
 
 
 def test_async_storage_round_trip() -> None:
     async def scenario() -> None:
         client = fakeredis.FakeAsyncRedis(decode_responses=True)
-        storage = AsyncRedisStringStorage(client)
+        storage = AsyncRedisStringStorage()
         try:
             assert isinstance(storage, AsyncKeyValueStorage)
-            assert await storage.get(_NAME, "missing") is None
-            assert await storage.exists(_NAME, "missing") is False
-            await storage.delete(_NAME, "missing")
+            assert await storage.get(client, _NAME, "missing") is None
+            assert await storage.exists(client, _NAME, "missing") is False
+            await storage.delete(client, _NAME, "missing")
 
-            await storage.set(_NAME, "a", "1", ttl=10)
-            assert await storage.get(_NAME, "a") == "1"
-            assert await storage.exists(_NAME, "a") is True
+            await storage.set(client, _NAME, "a", "1", ttl=10)
+            assert await storage.get(client, _NAME, "a") == "1"
+            assert await storage.exists(client, _NAME, "a") is True
             assert await client.get("users:a") == "1"
             assert 0 < await client.ttl("users:a") <= 10
 
-            await storage.mset(_NAME, {"b": "2", "c": "3"})
+            await storage.mset(client, _NAME, {"b": "2", "c": "3"})
             assert await client.ttl("users:b") == -1
-            assert await storage.mget(_NAME, ["b", "a", "b", "missing"]) == ["2", "1", "2", None]
+            assert await storage.mget(client, _NAME, ["b", "a", "b", "missing"]) == [
+                "2",
+                "1",
+                "2",
+                None,
+            ]
 
-            await storage.mset(_NAME, {"b": "20", "c": "30"}, ttl=5)
-            assert await storage.get(_NAME, "b") == "20"
+            await storage.mset(client, _NAME, {"b": "20", "c": "30"}, ttl=5)
+            assert await storage.get(client, _NAME, "b") == "20"
             assert await client.get("users:b") == "20"
             assert await client.get("users:c") == "30"
             assert 0 < await client.ttl("users:b") <= 5
             assert 0 < await client.ttl("users:c") <= 5
 
-            await storage.delete(_NAME, "a")
-            assert await storage.get(_NAME, "a") is None
-            assert await storage.exists(_NAME, "a") is False
+            await storage.delete(client, _NAME, "a")
+            assert await storage.get(client, _NAME, "a") is None
+            assert await storage.exists(client, _NAME, "a") is False
         finally:
             await client.aclose()
 
@@ -110,11 +115,11 @@ def test_async_storage_round_trip() -> None:
 
 def test_async_storage_empty_batches_do_not_call_redis() -> None:
     spy = _MgetSpy()
-    storage = AsyncRedisStringStorage(spy)  # type: ignore[arg-type]
+    storage = AsyncRedisStringStorage()
 
     async def scenario() -> None:
-        assert await storage.mget(_NAME, []) == []
-        await storage.mset(_NAME, {})
+        assert await storage.mget(spy, _NAME, []) == []  # type: ignore[arg-type]
+        await storage.mset(spy, _NAME, {})  # type: ignore[arg-type]
 
     asyncio.run(scenario())
     assert spy.called is False
@@ -123,12 +128,12 @@ def test_async_storage_empty_batches_do_not_call_redis() -> None:
 def test_async_storage_decodes_bytes() -> None:
     async def scenario() -> None:
         client = fakeredis.FakeAsyncRedis(decode_responses=False)
-        storage = AsyncRedisStringStorage(client)
+        storage = AsyncRedisStringStorage()
         try:
-            await storage.set(_NAME, "a", "hello")
+            await storage.set(client, _NAME, "a", "hello")
             assert await client.get("users:a") == b"hello"
-            assert await storage.get(_NAME, "a") == "hello"
-            assert await storage.mget(_NAME, ["a", "missing"]) == ["hello", None]
+            assert await storage.get(client, _NAME, "a") == "hello"
+            assert await storage.mget(client, _NAME, ["a", "missing"]) == ["hello", None]
         finally:
             await client.aclose()
 

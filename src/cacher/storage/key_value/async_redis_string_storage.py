@@ -10,42 +10,43 @@ def _redis_key(name: str, field: str) -> str:
     return f"{name}:{field}"
 
 
-class AsyncRedisStringStorage(AsyncKeyValueStorage[str, str]):
+class AsyncRedisStringStorage(AsyncKeyValueStorage[AsyncRedis, str, str]):
     """Asynchronous Redis strings. The Redis key is ``name:field``."""
 
-    def __init__(self, client: AsyncRedis) -> None:
-        self._client = client
+    async def get(self, client: AsyncRedis, name: str, field: str) -> str | None:
+        return decode(await client.get(_redis_key(name, field)))
 
-    async def get(self, name: str, field: str) -> str | None:
-        return decode(await self._client.get(_redis_key(name, field)))
-
-    async def set(self, name: str, field: str, value: str, *, ttl: int | None = None) -> None:
+    async def set(
+        self, client: AsyncRedis, name: str, field: str, value: str, *, ttl: int | None = None
+    ) -> None:
         key = _redis_key(name, field)
         if ttl is None:
-            await self._client.set(key, value)
+            await client.set(key, value)
         else:
-            await self._client.set(key, value, ex=ttl)
+            await client.set(key, value, ex=ttl)
 
-    async def delete(self, name: str, field: str) -> None:
-        await self._client.delete(_redis_key(name, field))
+    async def delete(self, client: AsyncRedis, name: str, field: str) -> None:
+        await client.delete(_redis_key(name, field))
 
-    async def exists(self, name: str, field: str) -> bool:
-        return bool(await self._client.exists(_redis_key(name, field)))
+    async def exists(self, client: AsyncRedis, name: str, field: str) -> bool:
+        return bool(await client.exists(_redis_key(name, field)))
 
-    async def mget(self, name: str, fields: Sequence[str]) -> list[str | None]:
+    async def mget(self, client: AsyncRedis, name: str, fields: Sequence[str]) -> list[str | None]:
         if not fields:
             return []
-        raw = await self._client.mget([_redis_key(name, field) for field in fields])
+        raw = await client.mget([_redis_key(name, field) for field in fields])
         return [decode(item) for item in raw]
 
-    async def mset(self, name: str, items: Mapping[str, str], *, ttl: int | None = None) -> None:
+    async def mset(
+        self, client: AsyncRedis, name: str, items: Mapping[str, str], *, ttl: int | None = None
+    ) -> None:
         if not items:
             return
         mapping = {_redis_key(name, field): value for field, value in items.items()}
         if ttl is None:
-            await self._client.mset(mapping)
+            await client.mset(mapping)
             return
-        pipe = self._client.pipeline(transaction=True)
+        pipe = client.pipeline(transaction=True)
         for key, value in mapping.items():
             pipe.set(key, value, ex=ttl)
         await pipe.execute()

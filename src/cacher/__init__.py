@@ -6,6 +6,7 @@ from cacher.indexes import (
     AsyncKeyValueIndex,
     AsyncSetIndex,
     Index,
+    IndexRegistry,
     KeyValueBase,
     KeyValueIndex,
     SetBase,
@@ -14,8 +15,7 @@ from cacher.indexes import (
     build_async_set_index,
     build_key_value_index,
     build_set_index,
-    get_async_index,
-    get_index,
+    get_registry,
 )
 from cacher.serializers import (
     BoolSerializer,
@@ -45,6 +45,7 @@ __all__ = [
     "DictSerializer",
     "FloatSerializer",
     "Index",
+    "IndexRegistry",
     "IntSerializer",
     "KeyValueBase",
     "KeyValueIndex",
@@ -59,6 +60,5 @@ __all__ = [
     "build_async_set_index",
     "build_key_value_index",
     "build_set_index",
-    "get_async_index",
-    "get_index",
+    "get_registry",
 ]
